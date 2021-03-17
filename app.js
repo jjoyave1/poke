@@ -7,6 +7,8 @@ const PORT = 8000;
 const ENDPOINT = 'https://pokeapi.co/api/v2/pokemon/';
 const POKEMON_NUMBERS = [1, 2, 3, 4, 5];
 
+let GLOBAL_BODY = [];
+
 
 /**
  * @function generateBaseData
@@ -33,13 +35,18 @@ function generateBaseData(idArray, masterResponse) {
     
                 requiredData.name = rawData.name;
                 requiredData.stats = extractStats(rawData);
-                response.write(JSON.stringify(requiredData));
+                GLOBAL_BODY.push(requiredData);
                 requestCount++;
 
-                if (requestCount !== maxRequests) {
-                    response.write(',');
-                } else {
-                    response.write(']');
+                if (requestCount === maxRequests) {
+                    // requests complete, make calculations and sort
+                    GLOBAL_BODY.sort(sortByName);
+
+                    let body = {
+                        pokemon: GLOBAL_BODY,
+                        averages: generateAverages(GLOBAL_BODY)
+                    };
+                    response.write(JSON.stringify(body));
                     response.end();
                 }
                 return;
@@ -68,6 +75,50 @@ app.listen(PORT, () => {
 });
 
 app.get('/data', (req, res, next) => {
-    res.write('[');
     generateBaseData(POKEMON_NUMBERS, res);
 });
+
+//helpers
+
+function sortByName(a, b) {
+    const nameA = a.name.toLowerCase();
+    const nameB = b.name.toLowerCase();
+    if (nameA < nameB) {
+        return -1;
+    }
+    if (nameA > nameB) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * @function generateAverages
+ * @param {object[]} pokemon 
+ */
+function generateAverages(pokemon) {
+    //[{"name":"hp","stat":45},{"name":"attack","stat":49},{"name":"defense","stat":49},{"name":"special-attack","stat":65},{"name":"special-defense","stat":65},{"name":"speed","stat":45}]
+    const averages = [];
+    const numberOfMons = pokemon.length;
+
+    for (let i = 0; i < numberOfMons; i++) {
+        const singleMon = pokemon[i];
+        const singleMonStats = singleMon.stats;
+
+        for (let j = 0, jLen = singleMonStats.length; j < jLen; j++) {
+            const stat = singleMonStats[i];
+            if (averages.filter(item => item.name === stat.name).length > 0) {
+                const name = stat.name;
+                const value = stat.stat;
+                const itemIndex = averages.findIndex(item => item.name === name);
+                averages[itemIndex].stat += value;
+            } else {
+                averages.push(stat);
+            }
+
+        }
+    }
+
+    averages.map(item => item.stat = item.stat/numberOfMons);
+    return averages;
+}
